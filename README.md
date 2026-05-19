@@ -121,9 +121,6 @@ SIGNATURE_TYPE=1
 CHAIN_ID=137
 CLOB_HOST=https://clob.polymarket.com
 
-# Optional: Telegram notifications
-TELEGRAM_BOT_TOKEN=your_bot_token
-TELEGRAM_CHAT_ID=your_chat_id
 ```
 
 ### 5. Get Your Credentials
