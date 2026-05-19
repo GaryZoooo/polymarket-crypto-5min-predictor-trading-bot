@@ -21,7 +21,7 @@ Automated trading bot for [Polymarket](https://polymarket.com) 5-minute cryptocu
 - **Multi-currency support**: BTC, ETH, SOL, XRP, DOGE, HYPE, BNB
 - **SuperTrend strategy**: Detects when multiple pairs show strong directional consensus
 - **Automatic execution**: Places limit orders (0.99) when signals trigger
-- **Timing optimization**: Scans only during last minute before candle close
+- **Timing optimization**: Manually select the transaction time range
 - **Batch price fetching**: Single API call retrieves all prices
 - **Configurable parameters**: Easily adjust thresholds, pair lists, and order sizes
 
