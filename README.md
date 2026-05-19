@@ -28,53 +28,50 @@ Automated trading bot for [Polymarket](https://polymarket.com) 5-minute cryptocu
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│                        multi_bot.py                             │
-│                     (Main Entry Point)                          │
-│  - K线周期管理 (Candle cycle management)                        │
-│  - 加载 token_id (Load token IDs)                               │
-│  - 信号检测循环 (Signal detection loop)                          │
-│  - 订单执行 (Order execution)                                    │
-└─────────────────┬─────────────────────────────────────────────┘
-                  │
-    ┌─────────────┼─────────────┐
-    │             │             │
-    ▼             ▼             ▼
-┌─────────┐  ┌──────────┐  ┌────────────┐
-│  config │  │ multi_   │  │ signal_    │
-│   .py   │  │ market_  │  │ detector   │
-│         │  │ scanner  │  │            │
-│ 配置参数 │  │          │  │ 超级趋势   │
-│         │  │ Gamma API│  │ 信号检测   │
-│         │  │ CLOB API │  │            │
-└─────────┘  └──────────┘  └─────┬──────┘
-                                 │
-                                 ▼
-                         ┌────────────┐
-                         │ multi_     │
-                         │ trader     │
-                         │            │
-                         │ CLOB Client│
-                         │ 下单执行   │
-                         └────────────┘
+                        multi_bot.py
+                     (Main Entry Point)
+  - Candle cycle management
+  - Load token IDs
+  - Signal detection loop
+  - Order execution
+                         |
+    +---------------------+---------------------+
+    |                     |                     |
+    v                     v                     v
++---------+      +---------------+      +----------------+
+| config  |      | multi_market  |      | signal_        |
+| .py     |      | _scanner      |      | detector       |
+|         |      |               |      |                |
+| Config  |      | Gamma API     |      | SuperTrend     |
+| params  |      | CLOB API      |      | detection      |
++---------+      +---------------+      +-------+--------+
+                                                   |
+                                                   v
+                                          +------------+
+                                          | multi_     |
+                                          | trader     |
+                                          |            |
+                                          | CLOB Client|
+                                          | Order exec |
+                                          +------------+
 ```
 
 ### Data Flow
 
 ```
-1. Gamma API ──获取──> token_id (up/down)
-                         │
-                         ▼
-2. CLOB /prices ──获取──> 实时价格 (0-100)
-                         │
-                         ▼
-3. Signal Detector ──检测──> SuperTrend信号
-                         │
-                         ▼
-4. MultiTrader ──下单──> Polymarket CLOB
-                         │
-                         ▼
-5. 等待结算 ──赚取──> 收益
+1. Gamma API ──fetch──> token_id (up/down)
+                          |
+                          v
+2. CLOB /prices ──fetch──> Real-time prices (0-100)
+                          |
+                          v
+3. Signal Detector ──detect──> SuperTrend signal
+                          |
+                          v
+4. MultiTrader ──order──> Polymarket CLOB
+                          |
+                          v
+5. Wait for settlement ──profit──> Returns
 ```
 
 ## Requirements
@@ -109,7 +106,7 @@ pip install -r requirements.txt
 ### 4. Configure Environment
 
 ```bash
-cp .env.example .env
+cp env.example .env
 ```
 
 Edit `.env` with your credentials:
@@ -168,7 +165,7 @@ SUPER_TREND_PRICE = 70
 # Minimum pairs needed to trigger signal
 MIN_TRIGGER_COUNT = 3
 
-# K线周期 (seconds)
+# Candle interval (seconds)
 CANDLE_MINUTES = 5
 CANDLE_INTERVAL = 300
 ```
@@ -215,9 +212,9 @@ ORDER_MODE = "forward"  # "forward" or "reverse"
 Polymarket 5-minute prediction markets are structured as 5-minute candles. Each candle has a `start_ts` and `close_ts`.
 
 ```
-|←─────── 300 seconds ───────→|
+|<------- 300 seconds ------>|
 start_ts                    close_ts
-    │←─── scan ───→│
+    |<----- scan ----->|
     DETECT_BEFORE    DETECT_STOP
     _CLOSE          _BEFORE_CLOSE
 ```
@@ -227,14 +224,14 @@ start_ts                    close_ts
 The strategy detects "SuperTrend" when multiple pairs show strong directional consensus:
 
 ```
-Example: 3+ pairs show UP ≥ 70
-┌─────────┬─────────┐
-│  BTC    │  UP=75 │  ✓
-│  ETH    │  UP=72 │  ✓
-│  SOL    │  UP=80 │  ✓
-│  XRP    │  UP=45 │  
-│  DOGE   │  UP=60 │  
-└─────────┴─────────┘
+Example: 3+ pairs show UP >= 70
++---------+---------+
+|  BTC    |  UP=75 |  yes
+|  ETH    |  UP=72 |  yes
+|  SOL    |  UP=80 |  yes
+|  XRP    |  UP=45 |  
+|  DOGE   |  UP=60 |  
++---------+---------+
 Signal: SUPERTREND UP (3 pairs triggered)
 ```
 
@@ -242,7 +239,7 @@ Signal: SUPERTREND UP (3 pairs triggered)
 
 When signal triggers, the bot:
 
-1. Finds all available pairs for the opposite direction
+1. Finds all available pairs for the target direction
 2. Selects the cheapest one
 3. Places a limit order at 0.99 (almost guaranteed fill)
 4. Waits for settlement
@@ -250,11 +247,11 @@ When signal triggers, the bot:
 ```
 Signal: SUPERTREND UP detected
 Candidates for DOWN:
-┌─────────┬─────────┐
-│  BTC    │ DOWN=25 │
-│  DOGE   │ DOWN=22 │  ← Cheapest!
-│  SOL    │ DOWN=35 │
-└─────────┴─────────┘
++---------+---------+
+|  BTC    | DOWN=25 |
+|  DOGE   | DOWN=22 |  <- Cheapest!
+|  SOL    | DOWN=35 |
++---------+---------+
 Order: BUY DOGE DOWN @ 0.99
 ```
 
@@ -270,15 +267,15 @@ python multi_bot.py
 
 ```
 2026-05-19 10:00:00 [INFO] ============================================================
-2026-05-19 10:00:00 [INFO] 多币种相关性交易机器人启动
-2026-05-19 10:00:00 [INFO] 币种: BTC/ETH/SOL/XRP/DOGE/HYPE/BNB
-2026-05-19 10:00:00 [INFO] 策略: 超级趋势
+2026-05-19 10:00:00 [INFO] Multi-pair correlation trading bot started
+2026-05-19 10:00:00 [INFO] Pairs: BTC/ETH/SOL/XRP/DOGE/HYPE/BNB
+2026-05-19 10:00:00 [INFO] Strategy: SuperTrend
 2026-05-19 10:00:00 [INFO] ============================================================
-2026-05-19 10:04:30 [INFO] 检测窗口开启  K线: 10:00:00 ~ 10:05:00 UTC
+2026-05-19 10:04:30 [INFO] Detection window opened  Candle: 10:00:00 ~ 10:05:00 UTC
 2026-05-19 10:04:32 [INFO] BTC: UP=52.0 DN=48.0  ETH: UP=55.0 DN=45.0  ...
-2026-05-19 10:04:50 [INFO] 超级趋势触发! 趋势方向=UP  触发币种(3)=['BTC', 'ETH', 'SOL']
-2026-05-19 10:04:50 [INFO]   → 下单: DOGE DOWN  价格=22.0
-2026-05-19 10:04:50 [INFO] 下单成功! order_id=xxx  DOGE DOWN @0.22 x3.0
+2026-05-19 10:04:50 [INFO] SuperTrend triggered! Direction=UP  Pairs=['BTC', 'ETH', 'SOL']
+2026-05-19 10:04:50 [INFO]   -> Order: DOGE DOWN  Price=22.0
+2026-05-19 10:04:50 [INFO] Order success! order_id=xxx  DOGE DOWN @0.22 x3.0
 ```
 
 ### Run with Logs
@@ -327,7 +324,7 @@ polymarket-bot/
 ├── signal_detector.py     # SuperTrend signal detection
 ├── multi_trader.py        # Order execution
 ├── requirements.txt        # Python dependencies
-├── .env.example           # Environment template
+├── env.example            # Environment template
 ├── .gitignore             # Git ignore patterns
 └── README.md              # This file
 ```
@@ -380,7 +377,7 @@ class MultiTrader:
 
 ## Troubleshooting
 
-### "查询 X 市场失败"
+### "Query X market failed"
 
 **Problem**: Gamma API failed to fetch token IDs
 
@@ -389,7 +386,7 @@ class MultiTrader:
 - Verify the market exists on Polymarket
 - Markets may have expired if candle is old
 
-### "下单失败"
+### "Order failed"
 
 **Problem**: Order creation failed
 
@@ -399,7 +396,7 @@ class MultiTrader:
 - Ensure FUNDER_ADDRESS is valid
 - Check gas balance on Polygon
 
-### "未触发信号"
+### "No signals triggered"
 
 **Problem**: No signals detected
 
@@ -408,7 +405,7 @@ class MultiTrader:
 - Verify ENABLED_SYMBOLS includes active pairs
 - Markets may not have reached threshold yet
 
-### "L2 API 凭证已获取" but orders still fail
+### "L2 API credentials obtained" but orders still fail
 
 **Problem**: API key issue
 
@@ -431,22 +428,22 @@ SCAN_INTERVAL = 5  # Increase from 2 to 5 seconds
 
 ## Disclaimer
 
-⚠️ **IMPORTANT - READ CAREFULLY**
+WARNING: IMPORTANT - READ CAREFULLY
 
-This bot trades **real assets** on Polymarket with **your funds**. Cryptocurrency and prediction market trading involves **substantial risk of loss**.
+This bot trades real assets on Polymarket with your funds. Cryptocurrency and prediction market trading involves substantial risk of loss.
 
 - Past performance does not guarantee future results
 - The SuperTrend strategy may lose money in sideways or choppy markets
 - API changes or market structure modifications may break this bot
 - Always monitor your positions and account balance
 
-**You are solely responsible for any losses incurred.** This software is provided "as is" for educational and informational purposes only. The authors and contributors accept no liability for financial losses or damages arising from the use of this software.
+You are solely responsible for any losses incurred. This software is provided "as is" for educational and informational purposes only. The authors and contributors accept no liability for financial losses or damages arising from the use of this software.
 
-**Always test on small amounts first.**
+Always test on small amounts first.
 
 ## License
 
-MIT License - See LICENSE file for details.
+MIT License
 
 ## Contributing
 
